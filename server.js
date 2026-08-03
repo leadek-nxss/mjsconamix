@@ -3,11 +3,9 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, { cors: { origin: "*" } });
 const fs = require('fs');
-
 const PASS = "DVS1404";
 app.use(express.json({limit:'20mb'}));
 app.use(express.static('public'));
-
 let data = { textMsgs: [], photoMsgs: [] };
 try {
   if (fs.existsSync('data.json')) {
@@ -16,7 +14,6 @@ try {
     data.photoMsgs = j.photoMsgs || [];
   }
 } catch(e){}
-
 function save(){ fs.writeFileSync('data.json', JSON.stringify(data)); }
 
 app.get('/api/admin/all', (req,res)=>{
@@ -38,14 +35,21 @@ io.on('connection', socket=>{
     let image = typeof d==='object'? d.image : null;
     text = text.trim().slice(0,300);
     if(!text &&!image) return;
-    const m = { id: Date.now().toString(), text, image, time: Date.now() };
+    const m = { id: Date.now().toString(), text, image, replies:[], time: Date.now() };
     data.textMsgs.push(m); save(); io.emit('new-text', m);
   });
   socket.on('send-photo', (d)=>{
     if(!d.image) return;
-    const m = { id: Date.now().toString(), text: (d.text||'').slice(0,300), image: d.image, time: Date.now() };
+    const m = { id: Date.now().toString(), text: (d.text||'').slice(0,300), image: d.image, replies:[], time: Date.now() };
     data.photoMsgs.push(m); save(); io.emit('new-photo', m);
   });
+  socket.on('reply', ({type, parentId, text})=>{
+    text = (text||'').trim().slice(0,200); if(!text) return;
+    const list = type==='photo'? data.photoMsgs : data.textMsgs;
+    const parent = list.find(m=>m.id===parentId); if(!parent) return;
+    if(!parent.replies) parent.replies=[];
+    parent.replies.push({id: Date.now().toString(), text, time: Date.now()});
+    save(); io.emit('update-replies', {type, parentId, replies: parent.replies});
+  });
 });
-
 http.listen(process.env.PORT || 3000, ()=>console.log('ON'));
