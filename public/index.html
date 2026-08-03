@@ -1,15 +1,108 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MJSCONAMIX</title><script src="/socket.io/socket.io.js"></script><style>body{background:#080808;color:#fff;max-width:600px;margin:auto;padding:12px;font-family:system-ui}h1{color:#ff2a6d;text-align:center}.tabs{display:flex;gap:6px;background:#111;padding:6px;border-radius:12px}.tab{flex:1;padding:12px;border:none;border-radius:10px;background:transparent;color:#777;font-weight:800}.tab.active{background:#ff2a6d;color:#fff}.box{background:#111;border:1px solid #222;border-radius:14px;padding:12px;margin:12px 0}textarea{width:100%;background:#000;border:1px solid #333;color:#fff;border-radius:10px;padding:10px}button.send{background:#ff2a6d;border:none;color:#fff;padding:12px;border-radius:10px;font-weight:900;width:100%;margin-top:8px}.card{background:#161616;border:1px solid #333;border-radius:18px;overflow:hidden;margin:14px 0}.card img{width:100%;display:block}.card.t{padding:12px;font-size:16px}img.prev{width:100%;display:none;border-radius:10px;margin-top:8px}</style></head><body>
-<h1>📮 MJSCONAMIX</h1><div class="tabs"><button class="tab active" id="b1" onclick="show('text')">💬 Chismes</button><button class="tab" id="b2" onclick="show('photo')">📷 Fotos</button></div>
-<div id="pText"><div class="box"><textarea id="tx1" rows="3" placeholder="Chisme..."></textarea><input type="file" id="fl1" accept="image/*" hidden><button onclick="fl1.click()" style="width:100%;background:#222;color:#fff;padding:10px;border-radius:10px;border:1px solid #333">📷 Foto opcional</button><img id="pr1" class="prev"><button class="send" onclick="sendT()">Enviar</button></div><div id="fText"></div></div>
-<div id="pPhoto" style="display:none"><div class="box"><textarea id="tx2" rows="2" placeholder="Ej: los caché abrazados"></textarea><input type="file" id="fl2" accept="image/*" hidden><button onclick="fl2.click()" style="width:100%;background:#222;color:#fff;padding:10px;border-radius:10px;border:1px solid #333">📷 Seleccionar foto</button><img id="pr2" class="prev"><button class="send" onclick="sendP()">Publicar foto</button></div><div id="fPhoto"></div></div>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MJSCONAMIX</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+body{background:#0a0a0a;color:#fff;font-family:system-ui;max-width:600px;margin:auto;padding:12px}
+h1{color:#ff2a6d;text-align:center}
+.tabs{display:flex;gap:8px;background:#111;padding:6px;border-radius:12px}
+.tab{flex:1;padding:12px;border:none;border-radius:10px;background:#222;color:#888;font-weight:800}
+.tab.active{background:#ff2a6d;color:#fff}
+.box{background:#111;border:1px solid #222;border-radius:12px;padding:12px;margin:12px 0}
+textarea{width:100%;background:#000;color:#fff;border:1px solid #333;border-radius:10px;padding:10px}
+button.action{width:100%;padding:12px;border-radius:10px;border:none;font-weight:800;margin-top:8px}
+.btn-gray{background:#222;color:#fff;border:1px solid #333}
+.btn-pink{background:#ff2a6d;color:#fff}
+.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;overflow:hidden;margin:12px 0}
+.card img{width:100%;display:block}
+.card.txt{padding:12px;font-size:16px;font-weight:600}
+.prev{width:100%;display:none;border-radius:10px;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>📮 MJSCONAMIX</h1>
+<div class="tabs">
+<button id="b1" class="tab active" onclick="showTab('text')">💬 Chismes</button>
+<button id="b2" class="tab" onclick="showTab('photo')">📷 Fotos</button>
+</div>
+
+<div id="panelText">
+<div class="box">
+<textarea id="inText" rows="3" placeholder="Escribe tu chisme..."></textarea>
+<input type="file" id="fileText" accept="image/*" style="display:none">
+<button class="action btn-gray" type="button" onclick="document.getElementById('fileText').click()">📷 Foto opcional</button>
+<img id="prevText" class="prev">
+<button class="action btn-pink" type="button" onclick="sendText()">Enviar chisme</button>
+</div>
+<div id="feedText">Cargando...</div>
+</div>
+
+<div id="panelPhoto" style="display:none">
+<div class="box">
+<textarea id="inPhotoText" rows="2" placeholder="Describe la foto..."></textarea>
+<input type="file" id="filePhoto" accept="image/*" style="display:none">
+<button class="action btn-gray" type="button" onclick="document.getElementById('filePhoto').click()">📷 Seleccionar foto</button>
+<img id="prevPhoto" class="prev">
+<button class="action btn-pink" type="button" onclick="sendPhoto()">Publicar foto</button>
+</div>
+<div id="feedPhoto">Cargando...</div>
+</div>
+
 <script>
-const socket=io();let s1=null,s2=null;
-function show(m){pText.style.display=m==='text'?'block':'none';pPhoto.style.display=m==='photo'?'block':'none';b1.className=m==='text'?'tab active':'tab';b2.className=m==='photo'?'tab active':'tab';}
-function compress(f,cb){const r=new FileReader();r.onload=e=>{const i=new Image();i.onload=()=>{const c=document.createElement('canvas');let w=i.width,h=i.height;if(w>900){h=h*900/w;w=900;}c.width=w;c.height=h;c.getContext('2d').drawImage(i,0,0,w,h);cb(c.toDataURL('image/jpeg',0.7));};i.src=e.target.result;};r.readAsDataURL(f);}
-function card(m,t){return `<div class="card" id="${t}-${m.id}">${m.image?`<img src="${m.image}">`:''}<div class="t">${(m.text||'').replace(/</g,'&lt;')}</div></div>`;}
-socket.on('init-feed',d=>{fText.innerHTML=d.texts.slice().reverse().map(m=>card(m,'text')).join('');fPhoto.innerHTML=d.photos.slice().reverse().map(m=>card(m,'photo')).join('');});
-socket.on('new-text',m=>fText.insertAdjacentHTML('afterbegin',card(m,'text')));socket.on('new-photo',m=>fPhoto.insertAdjacentHTML('afterbegin',card(m,'photo')));
-fl1.onchange=e=>compress(e.target.files[0],r=>{s1=r;pr1.src=r;pr1.style.display='block';});fl2.onchange=e=>compress(e.target.files[0],r=>{s2=r;pr2.src=r;pr2.style.display='block';});
-function sendT(){const t=tx1.value;if(!t.trim()&&!s1) return; socket.emit('send-text',{text:t,image:s1});tx1.value='';s1=null;pr1.style.display='none';}
-function sendP(){if(!s2){alert('Selecciona foto');return;} socket.emit('send-photo',{text:tx2.value,image:s2});tx2.value='';s2=null;pr2.style.display='none';}
-</script></body></html>
+const socket = io();
+let imgText = null;
+let imgPhoto = null;
+
+function showTab(m){
+ document.getElementById('panelText').style.display = m==='text'? 'block' : 'none';
+ document.getElementById('panelPhoto').style.display = m==='photo'? 'block' : 'none';
+ document.getElementById('b1').className = m==='text'? 'tab active' : 'tab';
+ document.getElementById('b2').className = m==='photo'? 'tab active' : 'tab';
+}
+
+function toBase64(file, cb){
+ const reader = new FileReader();
+ reader.onload = e => cb(e.target.result);
+ reader.readAsDataURL(file);
+}
+
+document.getElementById('fileText').addEventListener('change', e=>{
+ const f = e.target.files[0]; if(!f) return;
+ toBase64(f, r=>{ imgText=r; const p=document.getElementById('prevText'); p.src=r; p.style.display='block'; });
+});
+document.getElementById('filePhoto').addEventListener('change', e=>{
+ const f = e.target.files[0]; if(!f) return;
+ toBase64(f, r=>{ imgPhoto=r; const p=document.getElementById('prevPhoto'); p.src=r; p.style.display='block'; });
+});
+
+function cardHTML(m){
+ return `<div class="card">${m.image? `<img src="${m.image}">` : ''}<div class="txt">${(m.text||'').replace(/</g,'&lt;')}</div></div>`;
+}
+
+socket.on('init', d=>{
+ document.getElementById('feedText').innerHTML = d.textMsgs.slice().reverse().map(m=>cardHTML(m)).join('') || '<p style="opacity:.4;text-align:center">No hay chismes</p>';
+ document.getElementById('feedPhoto').innerHTML = d.photoMsgs.slice().reverse().map(m=>cardHTML(m)).join('') || '<p style="opacity:.4;text-align:center">No hay fotos</p>';
+});
+socket.on('new-text', m=>{ document.getElementById('feedText').insertAdjacentHTML('afterbegin', cardHTML(m)); });
+socket.on('new-photo', m=>{ document.getElementById('feedPhoto').insertAdjacentHTML('afterbegin', cardHTML(m)); });
+socket.on('reload', ()=>location.reload());
+
+function sendText(){
+ const t = document.getElementById('inText').value;
+ if(!t.trim() &&!imgText){ alert('Escribe algo o pon foto'); return; }
+ socket.emit('send-text', {text:t, image:imgText});
+ document.getElementById('inText').value=''; imgText=null; document.getElementById('prevText').style.display='none';
+ alert('Enviado!');
+}
+function sendPhoto(){
+ if(!imgPhoto){ alert('Selecciona una foto'); return; }
+ socket.emit('send-photo', {text:document.getElementById('inPhotoText').value, image:imgPhoto});
+ document.getElementById('inPhotoText').value=''; imgPhoto=null; document.getElementById('prevPhoto').style.display='none';
+ alert('Foto publicada!');
+}
+</script>
+</body>
+</html>
