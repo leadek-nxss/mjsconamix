@@ -1,29 +1,90 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const io = require('socket.io')(http, { maxHttpBufferSize: 10e6 });
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+
 const ADMIN_PASS = "DVS1404";
-app.use(express.json({limit:'15mb'}));
-app.use(express.static('public'));
-let data = { mapImage: "", rooms: [{id:"101",name:"101",x:20,y:30},{id:"102",name:"102",x:50,y:30},{id:"103",name:"103",x:80,y:30},{id:"201",name:"201",x:20,y:60},{id:"202",name:"202",x:50,y:60},{id:"banos",name:"Baños",x:80,y:60}], messages: {} };
-try{ if(fs.existsSync('data.json')) data = JSON.parse(fs.readFileSync('data.json','utf8')); }catch(e){}
-function save(){ fs.writeFileSync('data.json', JSON.stringify(data)); }
-io.on('connection', socket => {
-  socket.emit('init-data', data);
-  socket.on('join-room', id => { socket.join(id); socket.emit('room-messages', data.messages[id]||[]); });
-  socket.on('send-message', ({roomId,text})=>{
-    text=text.trim().substring(0,200); if(!text) return;
-    if(!data.messages[roomId]) data.messages[roomId]=[];
-    const msg={id:Date.now().toString(), text, time:Date.now()};
-    data.messages[roomId].push(msg); save();
-    io.to(roomId).emit('new-message', msg);
-    io.emit('msg-count-update',{roomId,count:data.messages[roomId].length});
-  });
-  socket.on('admin-login',(p,cb)=>cb(p===ADMIN_PASS));
-  socket.on('admin-save-rooms',(p,r)=>{ if(p!==ADMIN_PASS) return; data.rooms=r; save(); io.emit('rooms-update',r); });
-  socket.on('admin-save-map',(p,img)=>{ if(p!==ADMIN_PASS) return; data.mapImage=img; save(); io.emit('map-update',img); });
-  socket.on('admin-delete-msg',(p,roomId,msgId)=>{ if(p!==ADMIN_PASS) return; data.messages[roomId]=data.messages[roomId].filter(m=>m.id!==msgId); save(); io.to(roomId).emit('room-messages',data.messages[roomId]); });
-  socket.on('admin-clear-room',(p,roomId)=>{ if(p!==ADMIN_PASS) return; data.messages[roomId]=[]; save(); io.to(roomId).emit('room-messages',[]); });
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
-http.listen(process.env.PORT||3000);
+
+app.use(express.json({limit:'10mb'}));
+app.use(express.static('public'));
+
+let data = { textMsgs: [], photoMsgs: [] };
+try { 
+  if(fs.existsSync('data.json')) {
+    const j = JSON.parse(fs.readFileSync('data.json','utf8'));
+    data.textMsgs = j.textMsgs || j.messages || [];
+    data.photoMsgs = j.photoMsgs || [];
+  }
+} catch(e){}
+function save(){ try{ fs.writeFileSync('data.json', JSON.stringify(data)); }catch(e){} }
+function shuffle(a){ return [...a].sort(()=>0.5-Math.random()); }
+
+io.on('connection', socket => {
+  socket.emit('init-feed', {
+    texts: shuffle(data.textMsgs).slice(0,100),
+    photos: shuffle(data.photoMsgs).slice(0,100)
+  });
+
+  socket.on('send-text', text=>{
+    text=(text||"").trim().substring(0,300); if(!text) return;
+    const msg={id:Date.now().toString(), text, image:null, replies:[], time:Date.now()};
+    data.textMsgs.push(msg); if(data.textMsgs.length>1000) data.textMsgs.shift(); save();
+    io.emit('new-text', msg);
+  });
+
+  socket.on('send-photo', async ({text,image})=>{
+    if(!image) return;
+    try{
+      let finalUrl = image;
+      // Si tienes Cloudinary configurado, súbela. Si no, usa base64
+      if(process.env.CLOUDINARY_CLOUD_NAME){
+        const up = await cloudinary.uploader.upload(image, { folder:"mjsconamix", transformation:[{width:600, crop:"limit", quality:"auto:good"}] });
+        finalUrl = up.secure_url;
+      }
+      const msg={id:Date.now().toString(), text:(text||"").trim().substring(0,200), image: finalUrl, replies:[], time:Date.now(), public_id: null};
+      // Si es foto, siempre va a fotos, así admin la ve
+      data.photoMsgs.push(msg); if(data.photoMsgs.length>1000) data.photoMsgs.shift(); save();
+      io.emit('new-photo', msg);
+    }catch(e){ console.log(e); socket.emit('upload-error','Error subiendo'); }
+  });
+
+  socket.on('reply', ({type, parentId, text})=>{
+    text=(text||"").trim().substring(0,200); if(!text) return;
+    const list = type==='text'? data.textMsgs : data.photoMsgs;
+    const parent = list.find(m=>m.id===parentId); if(!parent) return;
+    if(!parent.replies) parent.replies=[];
+    parent.replies.push({id:Date.now().toString(), text, time:Date.now()});
+    save(); io.emit('update-replies', {type, parentId, replies: parent.replies});
+  });
+
+  // --- ADMIN ---
+  socket.on('admin-login',(p,cb)=> cb(p===ADMIN_PASS) );
+  socket.on('admin-get-all',(p,cb)=>{
+    if(p!==ADMIN_PASS) return cb(null);
+    cb(data);
+  });
+  socket.on('admin-delete',(p,type,id)=>{
+    if(p!==ADMIN_PASS) return;
+    if(type==='text') data.textMsgs=data.textMsgs.filter(m=>m.id!==id);
+    else data.photoMsgs=data.photoMsgs.filter(m=>m.id!==id);
+    save();
+    // manda update a todos
+    io.emit('admin-updated', data);
+  });
+  socket.on('admin-delete-reply',(p,type,parentId,replyId)=>{
+    if(p!==ADMIN_PASS) return;
+    const list = type==='text'? data.textMsgs : data.photoMsgs;
+    const parent=list.find(m=>m.id===parentId); if(!parent) return;
+    parent.replies=parent.replies.filter(r=>r.id!==replyId); save();
+    io.emit('update-replies', {type, parentId, replies: parent.replies});
+  });
+});
+
+http.listen(process.env.PORT||3000, ()=>console.log('Listo'));
