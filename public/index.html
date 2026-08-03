@@ -10,15 +10,13 @@ button.action{width:100%;padding:12px;border-radius:10px;border:none;font-weight
 .btn-gray{background:#222;color:#fff;border:1px solid #333}
 .btn-pink{background:#ff2a6d;color:#fff}
 .card{background:#161616;border:1px solid #2a2a2a;border-radius:18px;overflow:hidden;margin:14px 0}
-.card img{width:100%;display:block;max-height:600px;object-fit:contain;background:#000}
+.card img{width:100%;display:block;height:auto;min-height:200px;background:#000;object-fit:contain}
 .card.content{padding:14px}
-.card.txt{font-size:16px;font-weight:600;line-height:1.3;white-space:pre-wrap;word-break:break-word}
-.replies{margin-top:10px}
+.txt{font-size:16px;font-weight:600;white-space:pre-wrap;word-break:break-word}
 .reply{font-size:13px;color:#ccc;border-left:3px solid #ff2a6d;padding-left:8px;margin:6px 0}
 .replyBox{display:flex;gap:6px;margin-top:10px}
 .replyBox input{flex:1;background:#000;border:1px solid #333;color:#fff;padding:9px;border-radius:8px}
-.replyBox button{background:#222;color:#fff;border:none;padding:9px 12px;border-radius:8px;font-weight:800}
-.prev{width:100%;display:none;border-radius:10px;margin-top:8px;max-height:300px;object-fit:contain;background:#000}
+.prev{width:100%;display:none;border-radius:12px;margin-top:8px;max-height:350px;object-fit:contain;background:#000}
 </style></head><body>
 <h1>📮 MJSCONAMIX</h1>
 <div class="tabs"><button id="b1" class="tab active" onclick="showTab('text')">💬 Chismes</button><button id="b2" class="tab" onclick="showTab('photo')">📷 Fotos</button></div>
@@ -30,35 +28,44 @@ button.action{width:100%;padding:12px;border-radius:10px;border:none;font-weight
 <script>
 const socket = io();
 let imgText = null, imgPhoto = null;
-function showTab(m){
- document.getElementById('panelText').style.display=m==='text'?'block':'none';
- document.getElementById('panelPhoto').style.display=m==='photo'?'block':'none';
- document.getElementById('b1').className=m==='text'?'tab active':'tab';
- document.getElementById('b2').className=m==='photo'?'tab active':'tab';
+function showTab(m){panelText.style.display=m==='text'?'block':'none';panelPhoto.style.display=m==='photo'?'block':'none';b1.className=m==='text'?'tab active':'tab';b2.className=m==='photo'?'tab active':'tab';}
+
+function compress(file, cb){
+ const reader = new FileReader();
+ reader.onload = e=>{
+  const img = new Image();
+  img.onload = ()=>{
+   const canvas = document.createElement('canvas');
+   let w=img.width,h=img.height;
+   const MAX=800;
+   if(w>MAX||h>MAX){if(w>h){h=h*MAX/w;w=MAX;}else{w=w*MAX/h;h=MAX;}}
+   canvas.width=w;canvas.height=h;
+   canvas.getContext('2d').drawImage(img,0,0,w,h);
+   cb(canvas.toDataURL('image/jpeg',0.6));
+  };
+  img.src=e.target.result;
+ };
+ reader.readAsDataURL(file);
 }
-function toBase64(f,cb){const r=new FileReader();r.onload=e=>cb(e.target.result);r.readAsDataURL(f);}
-document.getElementById('fileText').addEventListener('change',e=>{const f=e.target.files[0];if(!f) return;toBase64(f,r=>{imgText=r;prevText.src=r;prevText.style.display='block';});});
-document.getElementById('filePhoto').addEventListener('change',e=>{const f=e.target.files[0];if(!f) return;toBase64(f,r=>{imgPhoto=r;prevPhoto.src=r;prevPhoto.style.display='block';});});
+
+fileText.addEventListener('change', e=>{const f=e.target.files[0];if(!f)return;compress(f,r=>{imgText=r;prevText.src=r;prevText.style.display='block';});});
+filePhoto.addEventListener('change', e=>{const f=e.target.files[0];if(!f)return;compress(f,r=>{imgPhoto=r;prevPhoto.src=r;prevPhoto.style.display='block';});});
 
 function cardHTML(m,type){
  const replies=(m.replies||[]).map(r=>`<div class="reply">${r.text.replace(/</g,'&lt;')}</div>`).join('');
- return `<div class="card" id="${type}-${m.id}">
- ${m.image?`<img src="${m.image}">`:''}
- <div class="content">
- <div class="txt">${(m.text||'').replace(/</g,'&lt;')}</div>
- <div class="replies" id="${type}-${m.id}-replies">${replies}</div>
- <div class="replyBox"><input id="${type}-${m.id}-inp" placeholder="Responder..."><button type="button" onclick="reply('${type}','${m.id}')">↩️</button></div>
- </div></div>`;
+ return `<div class="card" id="${type}-${m.id}">${m.image?`<img src="${m.image}">`:''}<div class="content"><div class="txt">${(m.text||'').replace(/</g,'&lt;')}</div><div id="${type}-${m.id}-replies">${replies}</div><div class="replyBox"><input id="${type}-${m.id}-inp" placeholder="Responder..."><button type="button" onclick="reply('${type}','${m.id}')" style="background:#222;color:#fff;border:none;padding:9px 12px;border-radius:8px">↩️</button></div></div></div>`;
 }
 socket.on('init',d=>{
- document.getElementById('feedText').innerHTML=d.textMsgs.slice().reverse().map(m=>cardHTML(m,'text')).join('')||'<p style="opacity:.4;text-align:center">No hay chismes</p>';
- document.getElementById('feedPhoto').innerHTML=d.photoMsgs.slice().reverse().map(m=>cardHTML(m,'photo')).join('')||'<p style="opacity:.4;text-align:center">No hay fotos</p>';
+ feedText.innerHTML=d.textMsgs.slice().reverse().map(m=>cardHTML(m,'text')).join('')||'<p style="opacity:.4;text-align:center">No hay chismes</p>';
+ feedPhoto.innerHTML=d.photoMsgs.slice().reverse().map(m=>cardHTML(m,'photo')).join('')||'<p style="opacity:.4;text-align:center">No hay fotos</p>';
 });
 socket.on('new-text',m=>feedText.insertAdjacentHTML('afterbegin',cardHTML(m,'text')));
 socket.on('new-photo',m=>feedPhoto.insertAdjacentHTML('afterbegin',cardHTML(m,'photo')));
-socket.on('update-replies',({type,parentId,replies})=>{const el=document.getElementById(type+'-'+parentId+'-replies');if(el) el.innerHTML=replies.map(r=>`<div class="reply">${r.text.replace(/</g,'&lt;')}</div>`).join('');});
+socket.on('update-replies',({type,parentId,replies})=>{
+ const el=document.getElementById(type+'-'+parentId+'-replies');if(el) el.innerHTML=replies.map(r=>`<div class="reply">${r.text.replace(/</g,'&lt;')}</div>`).join('');
+});
 socket.on('reload',()=>location.reload());
-function reply(type,id){const inp=document.getElementById(type+'-'+id+'-inp');if(!inp.value.trim()) return;socket.emit('reply',{type,parentId:id,text:inp.value});inp.value='';}
+function reply(type,id){const inp=document.getElementById(type+'-'+id+'-inp');if(!inp.value.trim())return;socket.emit('reply',{type,parentId:id,text:inp.value});inp.value='';}
 function sendText(){const t=inText.value;if(!t.trim()&&!imgText){alert('Escribe algo');return;}socket.emit('send-text',{text:t,image:imgText});inText.value='';imgText=null;prevText.style.display='none';}
 function sendPhoto(){if(!imgPhoto){alert('Selecciona foto');return;}socket.emit('send-photo',{text:inPhotoText.value,image:imgPhoto});inPhotoText.value='';imgPhoto=null;prevPhoto.style.display='none';}
 </script></body></html>
