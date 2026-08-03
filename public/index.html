@@ -1,58 +1,22 @@
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Admin MJSCONAMIX</title><script src="/socket.io/socket.io.js"></script>
-<style>*{box-sizing:border-box;font-family:system-ui}body{background:#0a0a0a;color:#fff;padding:16px;max-width:700px;margin:auto}
-button{padding:8px 12px;border-radius:8px;border:none;background:#ff2a6d;color:#fff;font-weight:700}
-.tabs{display:flex;gap:8px;margin:12px 0}.tab{flex:1;padding:12px;background:#111;border:1px solid #222;color:#888;border-radius:10px;font-weight:800}
-.tab.active{background:#ff2a6d;color:#fff}
-.card{background:#1a1a1a;border:1px solid #222;border-radius:12px;padding:12px;margin:10px 0;display:flex;gap:12px;justify-content:space-between}
-</style></head><body>
-<h2 style="color:#ff2a6d">ADMIN 🔒</h2>
-<div id="login"><input id="pass" type="password" placeholder="Clave DVS1404" style="padding:12px;border-radius:10px;background:#111;border:1px solid #333;color:#fff;width:70%"><button onclick="login()" style="margin-left:6px">Entrar</button><p id="st" style="opacity:.5"></p></div>
-<div id="panel" style="display:none">
-<div class="tabs"><button class="tab active" id="b1" onclick="show('text')">💬 Chismes</button><button class="tab" id="b2" onclick="show('photo')">📷 Fotos</button></div>
-<div id="secText"></div><div id="secPhoto" style="display:none"></div>
-</div>
+<title>BUZÓN MJSCONAMIX</title><script src="/socket.io/socket.io.js"></script>
+<style>*{box-sizing:border-box;font-family:system-ui}body{background:#0a0a0a;color:#fff;margin:0;padding:16px;max-width:600px;margin:auto}h1{color:#ff2a6d;text-align:center}.tabs{display:flex;gap:8px;background:#111;border-radius:14px;padding:6px}.tab{flex:1;padding:12px;border-radius:10px;border:none;background:transparent;color:#888;font-weight:800}.tab.active{background:#ff2a6d;color:#fff}.box{background:#111;border:1px solid #222;border-radius:16px;padding:12px;margin:14px 0}textarea{width:100%;background:#0a0a0a;border:1px solid #333;color:#fff;border-radius:12px;padding:10px}button.send{background:#ff2a6d;border:none;color:#fff;padding:12px;border-radius:12px;font-weight:800;width:100%;margin-top:8px}.msg{background:#1a1a1a;border:1px solid #222;border-radius:14px;padding:12px;margin:12px 0}.photo{border-radius:16px;overflow:hidden;background:#1a1a1a;border:1px solid #222;margin:12px 0}.photo img{width:100%;display:block}.replyBox{background:#0a0a0a;border-radius:10px;padding:8px;margin-top:8px;border:1px solid #222}.reply{font-size:13px;opacity:.8;margin:6px 0;border-left:2px solid #ff2a6d;padding-left:8px}.preview{max-width:120px;border-radius:10px;margin-top:8px;display:none}</style></head><body>
+<h1>📮 MJSCONAMIX</h1><div class="tabs"><button class="tab active" id="t1" onclick="showTab('text')">💬 Chismes</button><button class="tab" id="t2" onclick="showTab('photo')">📷 Fotos</button></div>
+<div id="panelText"><div class="box"><textarea id="txt" rows="3" placeholder="Chisme anónimo..."></textarea><input type="file" id="imgInputText" accept="image/*" style="display:none"><div style="display:flex;gap:8px;margin-top:8px"><button onclick="document.getElementById('imgInputText').click()" style="background:#222;border:none;color:#fff;padding:10px;border-radius:10px;flex:1">📷 Foto opcional</button><button class="send" onclick="sendText()" style="margin-top:0;flex:2">Enviar</button></div><img id="previewText" class="preview"></div><div id="feedText"><p style="opacity:.4;text-align:center">Cargando...</p></div></div>
+<div id="panelPhoto" style="display:none"><div class="box"><textarea id="cap" rows="2" placeholder="Ej: los caché abrazados 😭"></textarea><input type="file" id="imgInput" accept="image/*" style="display:none"><button onclick="document.getElementById('imgInput').click()" style="background:#222;border:none;color:#fff;padding:10px;border-radius:10px;width:100%;margin-top:8px">📷 Seleccionar foto</button><img id="preview" class="preview"><button class="send" onclick="sendPhoto()">Publicar</button></div><div id="feedPhoto"><p style="opacity:.4;text-align:center">Cargando...</p></div></div>
 <script>
-const socket=io();
-let myPass="", allData={textMsgs:[],photoMsgs:[]};
-socket.on('connect',()=>document.getElementById('st').innerText='Conectado ✓');
-socket.on('admin-updated',(d)=>{ allData=d; render(); });
-function show(m){
-  document.getElementById('secText').style.display=m==='text'?'block':'none';
-  document.getElementById('secPhoto').style.display=m==='photo'?'block':'none';
-  document.getElementById('b1').className=m==='text'?'tab active':'tab';
-  document.getElementById('b2').className=m==='photo'?'tab active':'tab';
-}
-function login(){
-  myPass=document.getElementById('pass').value.trim();
-  socket.emit('admin-login',myPass,ok=>{
-    if(!ok) return alert('Clave mal');
-    document.getElementById('login').style.display='none';
-    document.getElementById('panel').style.display='block';
-    load();
-  });
-}
-function load(){
-  socket.emit('admin-get-all',myPass,d=>{
-    if(!d){ alert('Error cargando'); return; }
-    allData=d; render();
-  });
-}
-function render(){
-  const t=document.getElementById('secText'); const p=document.getElementById('secPhoto');
-  t.innerHTML=''; p.innerHTML='';
-  if(allData.textMsgs.length==0) t.innerHTML='<p style="opacity:.4">No hay chismes</p>';
-  else allData.textMsgs.slice().reverse().forEach(m=>{
-    let img = m.image? `<img src="${m.image}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;margin-bottom:6px;display:block">` : '';
-    let replies = (m.replies||[]).map(r=>`<div style="font-size:12px;display:flex;justify-content:space-between;gap:6px">${r.text} <button onclick="delReply('text','${m.id}','${r.id}')" style="background:#333">x</button></div>`).join('');
-    t.innerHTML+=`<div class="card"><div>${img}<b>${(m.text||'').replace(/</g,'&lt;')}</b><div style="margin-top:6px">${replies}</div></div><button onclick="del('text','${m.id}')">Borrar</button></div>`;
-  });
-  if(allData.photoMsgs.length==0) p.innerHTML='<p style="opacity:.4">No hay fotos</p>';
-  else allData.photoMsgs.slice().reverse().forEach(m=>{
-    let replies = (m.replies||[]).map(r=>`<div style="font-size:12px;display:flex;justify-content:space-between;gap:6px">${r.text} <button onclick="delReply('photo','${m.id}','${r.id}')" style="background:#333">x</button></div>`).join('');
-    p.innerHTML+=`<div class="card"><div><img src="${m.image}" style="width:90px;height:90px;object-fit:cover;border-radius:8px"><div style="margin-top:6px"><b>${(m.text||'').replace(/</g,'&lt;')}</b></div><div>${replies}</div></div><button onclick="del('photo','${m.id}')">Borrar</button></div>`;
-  });
-}
-function del(type,id){ if(!confirm('¿Borrar?')) return; socket.emit('admin-delete',myPass,type,id); setTimeout(load,500); }
-function delReply(type,pid,rid){ socket.emit('admin-delete-reply',myPass,type,pid,rid); setTimeout(load,300); }
+const socket=io(); let selected=null, selectedText=null;
+function showTab(m){document.getElementById('panelText').style.display=m==='text'?'block':'none';document.getElementById('panelPhoto').style.display=m==='photo'?'block':'none';document.getElementById('t1').className=m==='text'?'tab active':'tab';document.getElementById('t2').className=m==='photo'?'tab active':'tab';}
+function createTextHTML(m){return `<div class="msg" id="text-${m.id}"><div>${(m.text||'').replace(/</g,'&lt;')}</div><div id="text-${m.id}-replies">${(m.replies||[]).map(r=>`<div class="reply">${r.text.replace(/</g,'&lt;')}</div>`).join('')}</div><div class="replyBox"><input id="text-${m.id}-input" placeholder="Responder..." style="width:70%;background:#111;border:1px solid #333;color:#fff;padding:8px;border-radius:8px"><button onclick="reply('text','${m.id}')" style="background:#222;color:#fff;border:none;padding:8px;border-radius:8px;margin-left:4px">↩️</button></div></div>`;}
+function createPhotoHTML(m){return `<div class="photo" id="photo-${m.id}"><img src="${m.image}" loading="lazy"><div style="padding:10px">${(m.text||'').replace(/</g,'&lt;')}<div id="photo-${m.id}-replies">${(m.replies||[]).map(r=>`<div class="reply">${r.text.replace(/</g,'&lt;')}</div>`).join('')}</div><div class="replyBox"><input id="photo-${m.id}-input" placeholder="Comentar..." style="width:70%;background:#0a0a0a;border:1px solid #333;color:#fff;padding:8px;border-radius:8px"><button onclick="reply('photo','${m.id}')" style="background:#222;color:#fff;border:none;padding:8px;border-radius:8px;margin-left:4px">↩️</button></div></div></div>`;}
+socket.on('init-feed', d=>{const ft=document.getElementById('feedText');const fp=document.getElementById('feedPhoto');ft.innerHTML='';fp.innerHTML='';if(d.texts.length==0) ft.innerHTML='<p style="opacity:.4;text-align:center">Sé el primero</p>'; else d.texts.reverse().forEach(m=>ft.insertAdjacentHTML('beforeend',createTextHTML(m)));if(d.photos.length==0) fp.innerHTML='<p style="opacity:.4;text-align:center">Sin fotos</p>'; else d.photos.reverse().forEach(m=>fp.insertAdjacentHTML('beforeend',createPhotoHTML(m)));});
+socket.on('new-text', m=>{document.getElementById('feedText').insertAdjacentHTML('afterbegin',createTextHTML(m));});
+socket.on('new-photo', m=>{document.getElementById('feedPhoto').insertAdjacentHTML('afterbegin',createPhotoHTML(m));});
+socket.on('update-replies', ({type,parentId,replies})=>{const el=document.getElementById(type+'-'+parentId+'-replies');if(el) el.innerHTML=replies.map(r=>`<div class="reply">${r.text.replace(/</g,'&lt;')}</div>`).join('');});
+socket.on('force-reload', ()=>location.reload());
+function reply(type,parentId){const inp=document.getElementById(type+'-'+parentId+'-input');if(!inp.value.trim()) return; socket.emit('reply',{type,parentId,text:inp.value}); inp.value='';}
+document.getElementById('imgInputText').addEventListener('change', e=>{const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{selectedText=r.result; document.getElementById('previewText').src=selectedText; document.getElementById('previewText').style.display='block';}; r.readAsDataURL(f);});
+function sendText(){const t=document.getElementById('txt').value; if(!t.trim()&&!selectedText) return; if(selectedText) socket.emit('send-photo',{text:t,image:selectedText}); else socket.emit('send-text',t); document.getElementById('txt').value=''; selectedText=null; document.getElementById('previewText').style.display='none';}
+document.getElementById('imgInput').addEventListener('change', e=>{const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{selected=r.result; document.getElementById('preview').src=selected; document.getElementById('preview').style.display='block';}; r.readAsDataURL(f);});
+function sendPhoto(){if(!selected){alert('Selecciona foto');return;} const c=document.getElementById('cap').value; socket.emit('send-photo',{text:c,image:selected}); document.getElementById('cap').value=''; selected=null; document.getElementById('preview').style.display='none';}
 </script></body></html>
