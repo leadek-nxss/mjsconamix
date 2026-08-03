@@ -24,26 +24,22 @@ button{background:#ff2a6d;border:none;font-weight:800;cursor:pointer}
 
 <div id="login" style="margin-top:20px">
   <input id="pass" type="password" placeholder="Pon tu clave">
-  <button onclick="login()">Entrar</button>
+  <button id="btnLogin" onclick="login()">Entrar</button>
+  <p id="status" style="opacity:.5;font-size:13px;margin-top:10px">Conectando...</p>
 </div>
 
 <div id="panel" style="display:none">
   <hr style="margin:20px 0;border-color:#222">
   <h3>1. Sube el plano real de tu escuela</h3>
   <input type="file" id="file" accept="image/*">
-
   <h3 style="margin-top:20px">2. Clic en el mapa para crear salones</h3>
-  <p style="opacity:.6;font-size:13px">Donde le piques, se crea el salón. Ejemplo: 101, 205, Baños, Cancha, Dirección</p>
-
   <div id="mapWrap">
     <img id="mapImg" src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=900">
     <div id="roomsLayer"></div>
   </div>
-
   <div id="roomsList" style="display:flex;gap:8px;flex-wrap:wrap"></div>
-
   <hr style="margin:20px 0;border-color:#222">
-  <h3>3. Moderar mensajes anónimos</h3>
+  <h3>3. Moderar mensajes</h3>
   <div style="display:flex;gap:8px;margin:10px 0">
     <select id="roomSelect" style="flex:1"></select>
     <button onclick="loadMsgs()">Ver</button>
@@ -53,47 +49,55 @@ button{background:#ff2a6d;border:none;font-weight:800;cursor:pointer}
 </div>
 
 <script>
-const socket=io();
+const socket = io({transports:['websocket','polling']});
 let myPass="", rooms=[], data={};
+const status = document.getElementById('status');
+const btnLogin = document.getElementById('btnLogin');
+
+socket.on('connect',()=>{ status.innerText = "Conectado ✓ pon tu clave"; });
+socket.on('connect_error',()=>{ status.innerText = "No conecta, recarga la página"; });
+socket.on('disconnect',()=>{ status.innerText = "Se desconectó"; });
 
 function login(){
-  myPass=document.getElementById('pass').value;
-  socket.emit('admin-login',myPass, ok=>{
-    if(!ok) alert('Clave incorrecta');
+  myPass=document.getElementById('pass').value.trim();
+  if(!myPass){ alert('Pon la clave'); return; }
+  if(!socket.connected){ alert('Aún no conecta al servidor, espera 2 seg y reintenta'); return; }
+  btnLogin.innerText = "Verificando...";
+  socket.timeout(5000).emit('admin-login', myPass, (err, ok) => {
+    btnLogin.innerText = "Entrar";
+    if(err){ alert('El server no respondió, dale redeploy en Render'); return; }
+    if(!ok){ alert('Clave incorrecta'); }
     else {
       document.getElementById('login').style.display='none';
       document.getElementById('panel').style.display='block';
     }
   });
 }
+// Enter para login
+document.getElementById('pass').addEventListener('keydown', e=>{ if(e.key==='Enter') login(); });
 
 socket.on('init-data', d=>{
   data=d; rooms=d.rooms||[];
   if(d.mapImage) document.getElementById('mapImg').src=d.mapImage;
   render();
 });
-
 function render(){
   const layer=document.getElementById('roomsLayer');
   const list=document.getElementById('roomsList');
   const sel=document.getElementById('roomSelect');
   layer.innerHTML=''; list.innerHTML=''; sel.innerHTML='';
-
   rooms.forEach(r=>{
     const d=document.createElement('div');
     d.className='room'; d.style.left=r.x+'%'; d.style.top=r.y+'%';
     d.innerText=r.name; layer.appendChild(d);
-
     const chip=document.createElement('div');
     chip.className='chip';
     chip.innerHTML=`${r.name} <button onclick="delRoom('${r.id}')" style="padding:4px 8px;background:#333">x</button>`;
     list.appendChild(chip);
-
     const opt=document.createElement('option');
     opt.value=r.id; opt.text=r.name; sel.appendChild(opt);
   });
 }
-
 document.getElementById('mapWrap').onclick=e=>{
   if(!myPass) return;
   const rect=e.currentTarget.getBoundingClientRect();
@@ -104,19 +108,16 @@ document.getElementById('mapWrap').onclick=e=>{
   rooms.push({id:name.toLowerCase().replace(/\s+/g,'-')+'-'+Date.now(), name, x, y});
   socket.emit('admin-save-rooms',myPass,rooms);
 };
-
 function delRoom(id){
   rooms=rooms.filter(r=>r.id!==id);
   socket.emit('admin-save-rooms',myPass,rooms);
 }
-
 document.getElementById('file').addEventListener('change', e=>{
   const f=e.target.files[0]; if(!f) return;
   const rd=new FileReader();
   rd.onload=()=> socket.emit('admin-save-map',myPass,rd.result);
   rd.readAsDataURL(f);
 });
-
 function loadMsgs(){
   const id=document.getElementById('roomSelect').value;
   socket.emit('join-room',id);
@@ -129,7 +130,6 @@ function clearRoom(){
   const id=document.getElementById('roomSelect').value;
   if(confirm('¿Borrar TODOS los mensajes de este salón?')) socket.emit('admin-clear-room',myPass,id);
 }
-
 socket.on('room-messages', list=>{
   const box=document.getElementById('msgs');
   box.innerHTML='';
