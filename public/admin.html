@@ -1,60 +1,14 @@
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Admin MJSCONAMIX</title><script src="/socket.io/socket.io.js"></script>
-<style>
-*{box-sizing:border-box;font-family:system-ui}
-body{background:#0a0a0a;color:#fff;padding:16px;max-width:700px;margin:auto}
-button{padding:8px 12px;border-radius:8px;border:none;background:#ff2a6d;color:#fff;font-weight:700;cursor:pointer}
-.tabs{display:flex;gap:8px;margin:12px 0}
-.tab{flex:1;padding:12px;background:#111;border:1px solid #222;color:#888;border-radius:10px;font-weight:800}
-.tab.active{background:#ff2a6d;color:#fff}
-.card{background:#1a1a1a;border:1px solid #222;border-radius:12px;padding:12px;margin:10px 0;display:flex;gap:12px;justify-content:space-between}
-</style></head><body>
-<h2 style="color:#ff2a6d">ADMIN MJSCONAMIX 🔒</h2>
-<div id="login"><input id="pass" type="password" placeholder="Tu clave" style="padding:12px;border-radius:10px;background:#111;border:1px solid #333;color:#fff;width:70%"><button onclick="login()" style="margin-left:6px">Entrar</button></div>
-
-<div id="panel" style="display:none">
-<div class="tabs"><button class="tab active" id="b1" onclick="show('text')">💬 Chismes (texto + foto)</button><button class="tab" id="b2" onclick="show('photo')">📷 Fotos con texto</button></div>
-<div id="secText"></div>
-<div id="secPhoto" style="display:none"></div>
-</div>
-
+<title>Admin</title><style>*{box-sizing:border-box;font-family:system-ui}body{background:#0a0a0a;color:#fff;padding:16px;max-width:700px;margin:auto}button{padding:10px 14px;border-radius:10px;border:none;background:#ff2a6d;color:#fff;font-weight:800}.tabs{display:flex;gap:8px;margin:12px 0}.tab{flex:1;padding:12px;background:#111;border:1px solid #222;color:#888;border-radius:10px}.tab.active{background:#ff2a6d;color:#fff}.card{background:#1a1a1a;border:1px solid #222;border-radius:12px;padding:12px;margin:10px 0;display:flex;gap:10px;justify-content:space-between}</style></head><body>
+<h2 style="color:#ff2a6d">ADMIN 🔒</h2>
+<div id="login"><input id="pass" type="password" placeholder="DVS1404" style="padding:12px;border-radius:10px;background:#111;border:1px solid #333;color:#fff;width:65%"><button onclick="login()" style="margin-left:6px">Entrar</button><p id="msg" style="color:#888"></p></div>
+<div id="panel" style="display:none"><div class="tabs"><button class="tab active" id="b1" onclick="show('text')">💬 Chismes</button><button class="tab" id="b2" onclick="show('photo')">📷 Fotos</button></div><div id="secText"></div><div id="secPhoto" style="display:none"></div></div>
 <script>
-const socket=io(); let myPass="", allData={textMsgs:[],photoMsgs:[]};
-function show(m){
-  document.getElementById('secText').style.display=m==='text'?'block':'none';
-  document.getElementById('secPhoto').style.display=m==='photo'?'block':'none';
-  document.getElementById('b1').className=m==='text'?'tab active':'tab';
-  document.getElementById('b2').className=m==='photo'?'tab active':'tab';
-}
-function login(){
-  myPass=document.getElementById('pass').value.trim();
-  if(!myPass) return alert('Pon clave');
-  socket.emit('admin-login',myPass,ok=>{
-    if(!ok) alert('Clave mal');
-    else{ document.getElementById('login').style.display='none'; document.getElementById('panel').style.display='block'; load(); }
-  });
-}
-function load(){ socket.emit('admin-get-all',myPass,d=>{ if(!d) return; allData=d; render(); }); }
-function render(){
-  const t=document.getElementById('secText'); const p=document.getElementById('secPhoto');
-  t.innerHTML='<h3>💬 Chismes</h3>'; p.innerHTML='<h3>📷 Fotos</h3>';
-  
-  // TEXTOS (ahora pueden tener foto opcional)
-  allData.textMsgs.slice().reverse().forEach(m=>{
-    let img = m.image? `<img src="${m.image}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;display:block;margin-bottom:6px">` : '';
-    let replies = (m.replies||[]).map(r=>`<div style="font-size:12px;margin:4px 0;display:flex;gap:6px;justify-content:space-between"><span>${r.text.replace(/</g,'&lt;')}</span><button onclick="delReply('text','${m.id}','${r.id}')" style="background:#333;padding:2px 6px">x</button></div>`).join('');
-    t.innerHTML+=`<div class="card"><div>${img}<b>${m.text.replace(/</g,'&lt;')}</b><div style="margin-top:8px">${replies}</div></div><div><button onclick="del('text','${m.id}')">Borrar</button></div></div>`;
-  });
-  
-  // FOTOS
-  allData.photoMsgs.slice().reverse().forEach(m=>{
-    let replies = (m.replies||[]).map(r=>`<div style="font-size:12px;margin:4px 0;display:flex;gap:6px;justify-content:space-between"><span>${r.text.replace(/</g,'&lt;')}</span><button onclick="delReply('photo','${m.id}','${r.id}')" style="background:#333;padding:2px 6px">x</button></div>`).join('');
-    p.innerHTML+=`<div class="card"><div><img src="${m.image}" style="width:80px;height:80px;object-fit:cover;border-radius:8px"><div style="margin-top:6px"><b>${(m.text||'').replace(/</g,'&lt;')}</b></div><div style="margin-top:8px">${replies}</div></div><div><button onclick="del('photo','${m.id}')">Borrar</button></div></div>`;
-  });
-  
-  if(allData.textMsgs.length==0) t.innerHTML+='<p style="opacity:.4">Sin chismes</p>';
-  if(allData.photoMsgs.length==0) p.innerHTML+='<p style="opacity:.4">Sin fotos</p>';
-}
-function del(type,id){ if(!confirm('¿Borrar?')) return; socket.emit('admin-delete',myPass,type,id); setTimeout(load,800); }
-function delReply(type,pid,rid){ socket.emit('admin-delete-reply',myPass,type,pid,rid); setTimeout(load,400); }
+let PASS="", DATA={textMsgs:[],photoMsgs:[]};
+function show(m){document.getElementById('secText').style.display=m==='text'?'block':'none';document.getElementById('secPhoto').style.display=m==='photo'?'block':'none';document.getElementById('b1').className=m==='text'?'tab active':'tab';document.getElementById('b2').className=m==='photo'?'tab active':'tab';}
+async function login(){PASS=document.getElementById('pass').value.trim();document.getElementById('msg').innerText='Verificando...';const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS})});const j=await r.json();if(!j.ok) return document.getElementById('msg').innerText='Clave mal ❌';document.getElementById('login').style.display='none';document.getElementById('panel').style.display='block';load();}
+async function load(){const r=await fetch('/api/admin/all?pass='+encodeURIComponent(PASS));DATA=await r.json();render();}
+function render(){const t=document.getElementById('secText'),p=document.getElementById('secPhoto');t.innerHTML='';p.innerHTML='';if(DATA.textMsgs.length==0) t.innerHTML='<p style="opacity:.4">Sin chismes</p>'; DATA.textMsgs.slice().reverse().forEach(m=>{let replies=(m.replies||[]).map(rr=>`<div style="font-size:12px;display:flex;justify-content:space-between">${rr.text} <button onclick="delReply('text','${m.id}','${rr.id}')" style="background:#333">x</button></div>`).join(''); t.innerHTML+=`<div class="card"><div><b>${(m.text||'').replace(/</g,'&lt;')}</b><div>${replies}</div></div><button onclick="del('text','${m.id}')">Borrar</button></div>`;}); if(DATA.photoMsgs.length==0) p.innerHTML='<p style="opacity:.4">Sin fotos</p>'; DATA.photoMsgs.slice().reverse().forEach(m=>{let replies=(m.replies||[]).map(rr=>`<div style="font-size:12px;display:flex;justify-content:space-between">${rr.text} <button onclick="delReply('photo','${m.id}','${rr.id}')" style="background:#333">x</button></div>`).join(''); p.innerHTML+=`<div class="card"><div><img src="${m.image}" style="width:80px;height:80px;object-fit:cover;border-radius:8px"><div><b>${(m.text||'').replace(/</g,'&lt;')}</b></div><div>${replies}</div></div><button onclick="del('photo','${m.id}')">Borrar</button></div>`;});}
+async function del(type,id){if(!confirm('¿Borrar?')) return; await fetch('/api/admin/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,type,id})}); load();}
+async function delReply(type,parentId,replyId){await fetch('/api/admin/delete-reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pass:PASS,type,parentId,replyId})}); load();}
 </script></body></html>
