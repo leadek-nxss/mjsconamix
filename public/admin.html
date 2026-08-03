@@ -1,1 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin MJSCONAMIX</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{box-sizing:border-box;font-family:system-ui}
+body{background:#0a0a0a;color:#fff;padding:16px}
+h2{color:#ff2a6d}
+input,button,select{padding:12px;border-radius:10px;border:1px solid #333;background:#111;color:#fff}
+button{background:#ff2a6d;border:none;font-weight:800;cursor:pointer}
+#mapWrap{position:relative;width:100%;max-width:900px;background:#151515;border-radius:16px;overflow:hidden;aspect-ratio:16/9;margin:16px 0;border:1px solid #333}
+#mapImg{width:100%;height:100%;object-fit:cover}
+#roomsLayer{position:absolute;inset:0}
+.room{position:absolute;transform:translate(-50%,-50%);background:#fff;color:#000;padding:7px 12px;border-radius:20px;font-size:13px;font-weight:800}
+.msgRow{display:flex;justify-content:space-between;align-items:center;background:#1a1a1a;padding:12px;border-radius:12px;margin:8px 0;border:1px solid #222}
+.chip{background:#222;padding:8px 12px;border-radius:20px;display:flex;gap:8px;align-items:center;font-size:13px}
+</style>
+</head>
+<body>
+<h2>ADMIN MJSCONAMIX 🔒</h2>
+<p style="opacity:.6">Clave: DVS1404</p>
 
+<div id="login" style="margin-top:20px">
+  <input id="pass" type="password" placeholder="Pon tu clave">
+  <button onclick="login()">Entrar</button>
+</div>
+
+<div id="panel" style="display:none">
+  <hr style="margin:20px 0;border-color:#222">
+  <h3>1. Sube el plano real de tu escuela</h3>
+  <input type="file" id="file" accept="image/*">
+
+  <h3 style="margin-top:20px">2. Clic en el mapa para crear salones</h3>
+  <p style="opacity:.6;font-size:13px">Donde le piques, se crea el salón. Ejemplo: 101, 205, Baños, Cancha, Dirección</p>
+
+  <div id="mapWrap">
+    <img id="mapImg" src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=900">
+    <div id="roomsLayer"></div>
+  </div>
+
+  <div id="roomsList" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+
+  <hr style="margin:20px 0;border-color:#222">
+  <h3>3. Moderar mensajes anónimos</h3>
+  <div style="display:flex;gap:8px;margin:10px 0">
+    <select id="roomSelect" style="flex:1"></select>
+    <button onclick="loadMsgs()">Ver</button>
+    <button onclick="clearRoom()" style="background:#333">Borrar Todo</button>
+  </div>
+  <div id="msgs"></div>
+</div>
+
+<script>
+const socket=io();
+let myPass="", rooms=[], data={};
+
+function login(){
+  myPass=document.getElementById('pass').value;
+  socket.emit('admin-login',myPass, ok=>{
+    if(!ok) alert('Clave incorrecta');
+    else {
+      document.getElementById('login').style.display='none';
+      document.getElementById('panel').style.display='block';
+    }
+  });
+}
+
+socket.on('init-data', d=>{
+  data=d; rooms=d.rooms||[];
+  if(d.mapImage) document.getElementById('mapImg').src=d.mapImage;
+  render();
+});
+
+function render(){
+  const layer=document.getElementById('roomsLayer');
+  const list=document.getElementById('roomsList');
+  const sel=document.getElementById('roomSelect');
+  layer.innerHTML=''; list.innerHTML=''; sel.innerHTML='';
+
+  rooms.forEach(r=>{
+    const d=document.createElement('div');
+    d.className='room'; d.style.left=r.x+'%'; d.style.top=r.y+'%';
+    d.innerText=r.name; layer.appendChild(d);
+
+    const chip=document.createElement('div');
+    chip.className='chip';
+    chip.innerHTML=`${r.name} <button onclick="delRoom('${r.id}')" style="padding:4px 8px;background:#333">x</button>`;
+    list.appendChild(chip);
+
+    const opt=document.createElement('option');
+    opt.value=r.id; opt.text=r.name; sel.appendChild(opt);
+  });
+}
+
+document.getElementById('mapWrap').onclick=e=>{
+  if(!myPass) return;
+  const rect=e.currentTarget.getBoundingClientRect();
+  const x=((e.clientX-rect.left)/rect.width*100).toFixed(1);
+  const y=((e.clientY-rect.top)/rect.height*100).toFixed(1);
+  const name=prompt('Nombre del salón? Ej: 301');
+  if(!name) return;
+  rooms.push({id:name.toLowerCase().replace(/\s+/g,'-')+'-'+Date.now(), name, x, y});
+  socket.emit('admin-save-rooms',myPass,rooms);
+};
+
+function delRoom(id){
+  rooms=rooms.filter(r=>r.id!==id);
+  socket.emit('admin-save-rooms',myPass,rooms);
+}
+
+document.getElementById('file').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=> socket.emit('admin-save-map',myPass,rd.result);
+  rd.readAsDataURL(f);
+});
+
+function loadMsgs(){
+  const id=document.getElementById('roomSelect').value;
+  socket.emit('join-room',id);
+}
+function delMsg(roomId,msgId){
+  socket.emit('admin-delete-msg',myPass,roomId,msgId);
+  setTimeout(loadMsgs,400);
+}
+function clearRoom(){
+  const id=document.getElementById('roomSelect').value;
+  if(confirm('¿Borrar TODOS los mensajes de este salón?')) socket.emit('admin-clear-room',myPass,id);
+}
+
+socket.on('room-messages', list=>{
+  const box=document.getElementById('msgs');
+  box.innerHTML='';
+  if(list.length===0) box.innerHTML='<p style="opacity:.5">Sin mensajes</p>';
+  list.forEach(m=>{
+    const row=document.createElement('div');
+    row.className='msgRow';
+    row.innerHTML=`<span>${m.text}</span><button onclick="delMsg('${document.getElementById('roomSelect').value}','${m.id}')">Borrar</button>`;
+    box.appendChild(row);
+  });
+});
+</script>
+</body>
+</html>
