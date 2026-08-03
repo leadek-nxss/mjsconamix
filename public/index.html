@@ -1,28 +1,15 @@
-<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BUZÓN MJSCONAMIX</title><script src="/socket.io/socket.io.js"></script>
-<style>
-*{box-sizing:border-box;font-family:system-ui}
-body{background:#0a0a0a;color:#fff;margin:0;padding:16px;max-width:600px;margin:auto}
-h1{color:#ff2a6d;text-align:center}
-.tabs{display:flex;gap:8px;background:#111;border-radius:14px;padding:6px}
-.tab{flex:1;padding:12px;border-radius:10px;border:none;background:transparent;color:#888;font-weight:800}
-.tab.active{background:#ff2a6d;color:#fff}
-.box{background:#111;border:1px solid #222;border-radius:16px;padding:12px;margin:14px 0}
-textarea{width:100%;background:#0a0a0a;border:1px solid #333;color:#fff;border-radius:12px;padding:12px;font-size:14px}
-button.send{background:#ff2a6d;border:none;color:#fff;padding:13px;border-radius:12px;font-weight:800;width:100%;margin-top:8px;font-size:15px}
-.msg{background:#1a1a1a;border:1px solid #222;border-radius:14px;padding:12px;margin:12px 0}
-/* ARREGLO FOTOS */
-.photo{background:#1a1a1a;border:1px solid #222;border-radius:16px;margin:14px 0;overflow:hidden}
-.photo img{width:100%;height:auto;max-height:650px;object-fit:contain;background:#000;display:block}
-.photo .caption{padding:12px;font-size:15px;line-height:1.4}
-.replyBox{background:#0a0a0a;border-radius:10px;padding:8px;margin:10px 12px;border:1px solid #222;display:flex;gap:6px}
-.reply{font-size:13px;opacity:.9;margin:6px 12px;border-left:2px solid #ff2a6d;padding-left:8px}
-.preview{width:100%;max-height:300px;object-fit:contain;border-radius:12px;margin-top:10px;display:none;background:#000}
-</style></head><body>
-<h1>📮 MJSCONAMIX</h1>
-<div class="tabs"><button class="tab active" id="t1" onclick="showTab('text')">💬 Chismes</button><button class="tab" id="t2" onclick="showTab('photo')">📷 Fotos</button></div>
-
-<div id="panelText">
-<div class="box"><textarea id="txt" rows="3" placeholder="Chisme anónimo..."></textarea>
-<input type="file" id="imgInputText" accept="image/*" style="display:none">
-<div style="display:flex;gap:8px;margin-top:8px"><button onclick="document.getElementById('imgInputText').click()" style="background:#222;border:none;color:#fff;padding:11px;border-radius:10px;flex:1">📷 Foto opcional</button><button class="send" onclick="sendText()" style="margin-top:0;flex:2">Enviar</button></div>
-<img id="previewText" class="preview"></
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MJSCONAMIX</title><script src="/socket.io/socket.io.js"></script><style>body{background:#080808;color:#fff;max-width:600px;margin:auto;padding:12px;font-family:system-ui}h1{color:#ff2a6d;text-align:center}.tabs{display:flex;gap:6px;background:#111;padding:6px;border-radius:12px}.tab{flex:1;padding:12px;border:none;border-radius:10px;background:transparent;color:#777;font-weight:800}.tab.active{background:#ff2a6d;color:#fff}.box{background:#111;border:1px solid #222;border-radius:14px;padding:12px;margin:12px 0}textarea{width:100%;background:#000;border:1px solid #333;color:#fff;border-radius:10px;padding:10px}button.send{background:#ff2a6d;border:none;color:#fff;padding:12px;border-radius:10px;font-weight:900;width:100%;margin-top:8px}.card{background:#161616;border:1px solid #333;border-radius:18px;overflow:hidden;margin:14px 0}.card img{width:100%;display:block}.card.t{padding:12px;font-size:16px}img.prev{width:100%;display:none;border-radius:10px;margin-top:8px}</style></head><body>
+<h1>📮 MJSCONAMIX</h1><div class="tabs"><button class="tab active" id="b1" onclick="show('text')">💬 Chismes</button><button class="tab" id="b2" onclick="show('photo')">📷 Fotos</button></div>
+<div id="pText"><div class="box"><textarea id="tx1" rows="3" placeholder="Chisme..."></textarea><input type="file" id="fl1" accept="image/*" hidden><button onclick="fl1.click()" style="width:100%;background:#222;color:#fff;padding:10px;border-radius:10px;border:1px solid #333">📷 Foto opcional</button><img id="pr1" class="prev"><button class="send" onclick="sendT()">Enviar</button></div><div id="fText"></div></div>
+<div id="pPhoto" style="display:none"><div class="box"><textarea id="tx2" rows="2" placeholder="Ej: los caché abrazados"></textarea><input type="file" id="fl2" accept="image/*" hidden><button onclick="fl2.click()" style="width:100%;background:#222;color:#fff;padding:10px;border-radius:10px;border:1px solid #333">📷 Seleccionar foto</button><img id="pr2" class="prev"><button class="send" onclick="sendP()">Publicar foto</button></div><div id="fPhoto"></div></div>
+<script>
+const socket=io();let s1=null,s2=null;
+function show(m){pText.style.display=m==='text'?'block':'none';pPhoto.style.display=m==='photo'?'block':'none';b1.className=m==='text'?'tab active':'tab';b2.className=m==='photo'?'tab active':'tab';}
+function compress(f,cb){const r=new FileReader();r.onload=e=>{const i=new Image();i.onload=()=>{const c=document.createElement('canvas');let w=i.width,h=i.height;if(w>900){h=h*900/w;w=900;}c.width=w;c.height=h;c.getContext('2d').drawImage(i,0,0,w,h);cb(c.toDataURL('image/jpeg',0.7));};i.src=e.target.result;};r.readAsDataURL(f);}
+function card(m,t){return `<div class="card" id="${t}-${m.id}">${m.image?`<img src="${m.image}">`:''}<div class="t">${(m.text||'').replace(/</g,'&lt;')}</div></div>`;}
+socket.on('init-feed',d=>{fText.innerHTML=d.texts.slice().reverse().map(m=>card(m,'text')).join('');fPhoto.innerHTML=d.photos.slice().reverse().map(m=>card(m,'photo')).join('');});
+socket.on('new-text',m=>fText.insertAdjacentHTML('afterbegin',card(m,'text')));socket.on('new-photo',m=>fPhoto.insertAdjacentHTML('afterbegin',card(m,'photo')));
+fl1.onchange=e=>compress(e.target.files[0],r=>{s1=r;pr1.src=r;pr1.style.display='block';});fl2.onchange=e=>compress(e.target.files[0],r=>{s2=r;pr2.src=r;pr2.style.display='block';});
+function sendT(){const t=tx1.value;if(!t.trim()&&!s1) return; socket.emit('send-text',{text:t,image:s1});tx1.value='';s1=null;pr1.style.display='none';}
+function sendP(){if(!s2){alert('Selecciona foto');return;} socket.emit('send-photo',{text:tx2.value,image:s2});tx2.value='';s2=null;pr2.style.display='none';}
+</script></body></html>
