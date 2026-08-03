@@ -1,55 +1,72 @@
 const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http, { cors: { origin: "*" } });
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
 const fs = require('fs');
-const PASS = "DVS1404";
-app.use(express.json({limit:'20mb'}));
-app.use(express.static('public'));
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { maxHttpBufferSize: 1e7 });
+
+const DATA_FILE = path.join(__dirname, 'data.json');
 let data = { textMsgs: [], photoMsgs: [] };
-try {
-  if (fs.existsSync('data.json')) {
-    const j = JSON.parse(fs.readFileSync('data.json','utf8'));
-    data.textMsgs = j.textMsgs || [];
-    data.photoMsgs = j.photoMsgs || [];
-  }
-} catch(e){}
-function save(){ fs.writeFileSync('data.json', JSON.stringify(data)); }
 
-app.get('/api/admin/all', (req,res)=>{
-  if(req.query.pass!== PASS) return res.status(401).send('no');
-  res.json(data);
-});
-app.post('/api/admin/delete', (req,res)=>{
-  if(req.body.pass!== PASS) return res.status(401).send('no');
-  if(req.body.type === 'photo') data.photoMsgs = data.photoMsgs.filter(m=>m.id!== req.body.id);
-  else data.textMsgs = data.textMsgs.filter(m=>m.id!== req.body.id);
-  save(); io.emit('reload'); res.json({ok:true});
-});
-app.post('/api/admin/login', (req,res)=> res.json({ok:req.body.pass===PASS}));
+// Cargar datos guardados
+if (fs.existsSync(DATA_FILE)) {
+  try { data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch(e){}
+}
 
-io.on('connection', socket=>{
-  socket.emit('init', data);
-  socket.on('send-text', (d)=>{
-    let text = typeof d==='string'? d : d.text || '';
-    let image = typeof d==='object'? d.image : null;
-    text = text.trim().slice(0,300);
-    if(!text &&!image) return;
-    const m = { id: Date.now().toString(), text, image, replies:[], time: Date.now() };
-    data.textMsgs.push(m); save(); io.emit('new-text', m);
+function save() {
+  fs.writeFile(DATA_FILE, JSON.stringify(data), ()=>{});
+}
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/health', (req,res)=>res.send('ok'));
+
+io.on('connection', (socket) => {
+  // Solo manda las ultimas 20 para ahorrar megas
+  socket.emit('init', {
+    textMsgs: data.textMsgs.slice(-20),
+    photoMsgs: data.photoMsgs.slice(-20),
+    totalText: data.textMsgs.length,
+    totalPhoto: data.photoMsgs.length
   });
-  socket.on('send-photo', (d)=>{
-    if(!d.image) return;
-    const m = { id: Date.now().toString(), text: (d.text||'').slice(0,300), image: d.image, replies:[], time: Date.now() };
-    data.photoMsgs.push(m); save(); io.emit('new-photo', m);
+
+  socket.on('load-more', ({type, offset})=>{
+    if(type==='photo'){
+      const more = data.photoMsgs.slice(-(offset+20), -offset || undefined);
+      socket.emit('more-photos', more);
+    } else {
+      const more = data.textMsgs.slice(-(offset+20), -offset || undefined);
+      socket.emit('more-texts', more);
+    }
   });
-  socket.on('reply', ({type, parentId, text})=>{
-    text = (text||'').trim().slice(0,200); if(!text) return;
-    const list = type==='photo'? data.photoMsgs : data.textMsgs;
-    const parent = list.find(m=>m.id===parentId); if(!parent) return;
-    if(!parent.replies) parent.replies=[];
-    parent.replies.push({id: Date.now().toString(), text, time: Date.now()});
-    save(); io.emit('update-replies', {type, parentId, replies: parent.replies});
+
+  socket.on('send-text', ({text,image}) => {
+    const msg = { id: Date.now().toString(), text, image, replies:[], time: Date.now() };
+    data.textMsgs.push(msg);
+    save();
+    io.emit('new-text', msg);
+  });
+
+  socket.on('send-photo', ({text,image}) => {
+    const msg = { id: Date.now().toString(), text, image, replies:[], time: Date.now() };
+    data.photoMsgs.push(msg);
+    save();
+    io.emit('new-photo', msg);
+  });
+
+  socket.on('reply', ({type, parentId, text}) => {
+    const list = type==='text' ? data.textMsgs : data.photoMsgs;
+    const parent = list.find(m=>m.id===parentId);
+    if(parent){
+      parent.replies = parent.replies || [];
+      parent.replies.push({ id: Date.now().toString(), text });
+      save();
+      io.emit('update-replies', {type, parentId, replies: parent.replies});
+    }
   });
 });
-http.listen(process.env.PORT || 3000, ()=>console.log('ON'));
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, ()=>console.log('MJSCONAMIX corriendo en '+PORT));
